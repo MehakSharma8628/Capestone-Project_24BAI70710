@@ -6,7 +6,6 @@ import java.util.List;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.http.HttpMethod;
-import org.springframework.security.config.Customizer;
 import org.springframework.security.config.annotation.web.builders.HttpSecurity;
 import org.springframework.security.config.http.SessionCreationPolicy;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
@@ -26,63 +25,79 @@ public class SecurityConfig {
     }
 
     @Bean
-    CorsConfigurationSource corsSource() {
+    CorsConfigurationSource corsConfigurationSource() {
 
-        CorsConfiguration c = new CorsConfiguration();
+        CorsConfiguration config = new CorsConfiguration();
 
-        c.setAllowedOriginPatterns(List.of(
-            "https://capestone-project-24-bai-70710.vercel.app",
-            "https://*.vercel.app",
-            "http://localhost:*",
-            "http://127.0.0.1:*"
+        config.setAllowedOrigins(List.of(
+            "https://capestone-project-24-bai-70710.vercel.app"
         ));
 
-        c.setAllowedMethods(List.of(
+        config.setAllowedMethods(List.of(
             "GET", "POST", "PUT", "PATCH",
             "DELETE", "OPTIONS"
         ));
 
-        c.setAllowedHeaders(List.of("*"));
-        c.setAllowCredentials(false);
-        c.setMaxAge(3600L);
+        config.setAllowedHeaders(List.of(
+            "Authorization",
+            "Content-Type",
+            "Accept",
+            "Origin"
+        ));
 
-        UrlBasedCorsConfigurationSource src =
+        config.setAllowCredentials(true);
+        config.setMaxAge(3600L);
+
+        UrlBasedCorsConfigurationSource source =
             new UrlBasedCorsConfigurationSource();
 
-        src.registerCorsConfiguration("/**", c);
+        source.registerCorsConfiguration("/**", config);
 
-        return src;
+        return source;
     }
 
     @Bean
     SecurityFilterChain filterChain(
         HttpSecurity http,
-        JwtUtil jwt
+        JwtUtil jwt,
+        CorsConfigurationSource corsConfigurationSource
     ) throws Exception {
 
         http
-            .csrf(c -> c.disable())
-            .cors(Customizer.withDefaults())
-            .sessionManagement(s ->
-                s.sessionCreationPolicy(SessionCreationPolicy.STATELESS)
+            .csrf(csrf -> csrf.disable())
+
+            .cors(cors ->
+                cors.configurationSource(corsConfigurationSource)
             )
-            .exceptionHandling(e ->
-                e.authenticationEntryPoint((req, res, ex) ->
-                    res.sendError(401, "Login required")
+
+            .sessionManagement(session ->
+                session.sessionCreationPolicy(
+                    SessionCreationPolicy.STATELESS
                 )
             )
-            .authorizeHttpRequests(a -> a
+
+            .authorizeHttpRequests(auth -> auth
+
                 .requestMatchers(HttpMethod.OPTIONS, "/**").permitAll()
+
                 .requestMatchers("/api/auth/**").permitAll()
+
                 .requestMatchers(
                     HttpMethod.GET,
                     "/api/donors/search",
                     "/api/banks"
                 ).permitAll()
+
                 .requestMatchers("/api/admin/**").hasRole("ADMIN")
-                .requestMatchers(HttpMethod.PUT, "/api/banks/**").hasRole("ADMIN")
+
+                .requestMatchers(
+                    HttpMethod.PUT,
+                    "/api/banks/**"
+                ).hasRole("ADMIN")
+
                 .anyRequest().authenticated()
             )
+
             .addFilterBefore(
                 new JwtFilter(jwt),
                 UsernamePasswordAuthenticationFilter.class
